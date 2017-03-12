@@ -65,6 +65,8 @@ type Stream struct {
 
 func (self *Stream) PutToDstVideoChan(chunk *VideoChunk) {
 	livepeerChunkInMeter.Mark(1)
+	chanAlreadyClosed := false
+
 	//Put to the stream
 	if (chunk.HLSSegName != "") && (chunk.HLSSegData != nil) {
 		//Should kick out old segments when the map reaches a certain size.
@@ -74,11 +76,14 @@ func (self *Stream) PutToDstVideoChan(chunk *VideoChunk) {
 	} else {
 		select {
 		case self.DstVideoChan <- chunk:
-			if self.lastDstSeq < chunk.Seq-1 {
-				fmt.Printf("Chunk skipped at %d\n", chunk.Seq)
-				livepeerChunkSkipMeter.Mark(1)
+			// Only do this if we haven't unsubscribed from the stream
+			if chanAlreadyClosed == false {
+				if self.lastDstSeq < chunk.Seq-1 {
+					fmt.Printf("Chunk skipped at %d\n", chunk.Seq)
+					livepeerChunkSkipMeter.Mark(1)
+				}
+				self.lastDstSeq = chunk.Seq
 			}
-			self.lastDstSeq = chunk.Seq
 		default:
 		}
 	}

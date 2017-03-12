@@ -26,8 +26,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/livepeer/go-livepeer/livepeer/network"
 	"github.com/ethereum/go-ethereum/swarm/services/swap"
+	"github.com/livepeer/go-livepeer/livepeer/network"
 	"github.com/livepeer/go-livepeer/livepeer/storage"
 )
 

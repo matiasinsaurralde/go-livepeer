@@ -52,7 +52,7 @@ import (
 
 const (
 	Version            = 0
-	ProtocolLength     = uint64(11)
+	ProtocolLength     = uint64(12)
 	ProtocolMaxMsgSize = 10 * 1024 * 1024
 	NetworkId          = 326326
 )
@@ -291,6 +291,11 @@ func (self *bzz) handle() error {
 			// In this case req.Id == DeliverStreamMsgID || EOFStreamMsgID, so there is data in the req.SData field
 			chunk := streaming.ByteArrInVideoChunk(req.SData)
 
+			// Update upstream peers so we can unsubscribe later if necessary
+			if self.streamDB.ContainsUpstreamPeer(concatedStreamID, &peer{bzz: self}) == false {
+				self.streamDB.AddUpstreamPeer(concatedStreamID, &peer{bzz: self})
+			}
+
 			downstreamRequesters := self.streamDB.DownstreamRequesters[concatedStreamID]
 			if len(downstreamRequesters) > 0 {
 				// Write data to the Src channel of the stream so that it can be
@@ -310,6 +315,30 @@ func (self *bzz) handle() error {
 				close(stream.SrcVideoChan)
 				self.streamer.DeleteStream(concatedStreamID)
 			}
+		}
+
+	case streamUnsubscribeMsg:
+		var req streamUnsubscribeMsgData
+		if err := msg.Decode(&req); err != nil {
+			return self.protoError(ErrDecode, "<- %v: %v", msg, err)
+		}
+
+		originNode := req.OriginNode
+		streamID := req.StreamID
+		concatedStreamID := streaming.MakeStreamID(originNode, streamID)
+
+		// Remove this streamID from the downstream peers.
+		self.streamDB.DeleteDownstreamPeer(concatedStreamID, &peer{bzz: self})
+
+		//Unsubscribe ourselves if we aren't playing and have no downstream peers.
+		msg := &streamUnsubscribeMsgData{
+			OriginNode: originNode,
+			StreamID:   streamID,
+			from:       &peer{bzz: self},
+		}
+
+		for _, val := range self.streamDB.UpstreamProviders[concatedStreamID] {
+			val.streamUnsubscribe(msg)
 		}
 
 	case storeRequestMsg:
@@ -693,6 +722,11 @@ func (self *bzz) store(req *storeRequestMsgData) error {
 // send streamRequestMsg
 func (self *bzz) stream(req *streamRequestMsgData) error {
 	return self.send(streamRequestMsg, req)
+}
+
+// send streamUnsubscribeMsg
+func (self *bzz) streamUnsubscribe(req *streamUnsubscribeMsgData) error {
+	return self.send(streamUnsubscribeMsg, req)
 }
 
 // send transcodeRequestMsg

@@ -16,9 +16,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/logger"
 	"github.com/ethereum/go-ethereum/logger/glog"
-	"github.com/livepeer/go-livepeer/livepeer/storage/streaming"
 	"github.com/golang/groupcache/lru"
 	"github.com/kz26/m3u8"
+	"github.com/livepeer/go-livepeer/livepeer/storage/streaming"
 	lpmsCommon "github.com/livepeer/go-livepeer/lpms/common"
 	"github.com/livepeer/go-livepeer/lpms/types"
 	"github.com/nareix/joy4/av"
@@ -72,18 +72,18 @@ func Transcode(inChan chan *streaming.VideoChunk, outChan chan *streaming.VideoC
 }
 
 //Copy packets from channels in the streamer to our destination muxer
-func CopyRTMPFromStream(dst av.Muxer, stream *streaming.Stream, closeStreamC chan bool) (err error) {
+func CopyRTMPFromStream(dst av.Muxer, stream *streaming.Stream, closeStreamC chan bool, stream streamer.Stream, forwarder storage.CloudStore) (err error) {
 	if len(stream.SrcVideoChan) > 0 {
 		//First check SrcVideoChan, and then check DstVideoChan
-		CopyRTMPFromChannel(dst, stream.SrcVideoChan, closeStreamC)
+		CopyRTMPFromChannel(dst, stream.SrcVideoChan, closeStreamC, stream, forwarder)
 	} else {
-		CopyRTMPFromChannel(dst, stream.DstVideoChan, closeStreamC)
+		CopyRTMPFromChannel(dst, stream.DstVideoChan, closeStreamC, stream, forwarder)
 	}
 
 	return
 }
 
-func CopyRTMPFromChannel(dst av.Muxer, videoChan chan *streaming.VideoChunk, closeStreamC chan bool) (err error) {
+func CopyRTMPFromChannel(dst av.Muxer, videoChan chan *streaming.VideoChunk, closeStreamC chan bool, stream streamer.Stream, forwarder storage.CloudStore) (err error) {
 	chunk := <-videoChan
 	if err := dst.WriteHeader(chunk.HeaderStreams); err != nil {
 		fmt.Println("Error writing header copying from channel")
@@ -109,6 +109,8 @@ func CopyRTMPFromChannel(dst av.Muxer, videoChan chan *streaming.VideoChunk, clo
 			}
 			if err != nil {
 				glog.V(logger.Error).Infof("Error writing packet to video player: %s", err)
+				// Stopped playing the stream, want to unsubscribe
+				forwarder.UnsubscribeFromStream(stream.ID)
 				return err
 			}
 		}

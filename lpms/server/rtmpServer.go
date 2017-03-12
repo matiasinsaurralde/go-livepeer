@@ -62,7 +62,7 @@ func StartRTMPServer(rtmpPort string, srsRtmpPort string, srsHttpPort string, st
 		forwarder.Stream(strmID, kademlia.Address(common.HexToHash("")))
 
 		//Copy chunks to outgoing connection
-		go io.CopyRTMPFromStream(conn, stream, stream.CloseChan)
+		go io.CopyRTMPFromStream(conn, stream, stream.CloseChan, forwarder)
 	}
 
 	server.HandlePublish = func(conn *joy4rtmp.Conn) {
